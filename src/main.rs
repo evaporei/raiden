@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::{collections::HashMap, io::{self, Write}};
 
 #[derive(Debug)]
 enum Cmd {
@@ -23,12 +23,28 @@ impl Cmd {
 }
 
 fn main() -> io::Result<()> {
-    let mut input = String::new();
     let stdin = io::stdin();
+    let mut store = HashMap::new();
+    let mut input = String::new();
     loop {
         input.clear();
         io::stdout().flush()?;
         stdin.read_line(&mut input)?;
-        println!("{:?}", Cmd::parse(&input));
+        let cmd = Cmd::parse(&input);
+        match cmd {
+            Some(Cmd::Get(k)) => {
+                let v = store.get(&k);
+                println!("value: {v:?}");
+            },
+            Some(Cmd::Set(k, v)) => {
+                let insert = store.insert(k, v).is_none();
+                if insert {
+                    println!("inserted key");
+                } else {
+                    println!("updated key");
+                }
+            },
+            None => {},
+        };
     }
 }
