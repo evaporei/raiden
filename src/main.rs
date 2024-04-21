@@ -7,17 +7,30 @@ enum Cmd {
 }
 
 impl Cmd {
-    fn parse(input: &str) -> Option<Self> {
+    fn parse(input: &str) -> Result<Self, String> {
         let mut words = input.split_whitespace();
         match words.next() {
-            Some("get") => Some(Self::Get(words.next()?.to_owned())),
-            Some("set") => {
-                let mut kv = words.next().map(|kv| kv.split('='))?;
-                let k = kv.next()?.to_owned();
-                let v = kv.next()?.to_owned();
-                Some(Self::Set(k, v))
+            Some("get") => {
+                let k = words.next()
+                    .ok_or("get requires string")?
+                    .to_owned();
+                Ok(Self::Get(k))
             },
-            Some(_) | None => None
+            Some("set") => {
+                let mut kv = words.next()
+                    .map(|kv| kv.split('='))
+                    .ok_or("set argument needs to be in format key=value")?;
+                let k = kv.next()
+                    .ok_or("missing key in set command, example: set key=value")?
+                    .to_owned();
+                let v = kv.next()
+                    .ok_or("missing value in set command, example: set key=value")?
+                    .to_owned();
+                Ok(Self::Set(k, v))
+            },
+            Some(_) | None => {
+                Err("unknown command".to_owned())
+            }
         }
     }
 }
@@ -70,13 +83,13 @@ fn main() -> io::Result<()> {
         };
         let cmd = Cmd::parse(&input);
         match cmd {
-            Some(Cmd::Get(k)) => {
+            Ok(Cmd::Get(k)) => {
                 let contents = fs::read_to_string(&file)?;
                 store = ron::from_str(&contents).unwrap();
                 let v = store.get(&k);
-                println!("value: {v:?}");
+                println!("{v:?}");
             },
-            Some(Cmd::Set(k, v)) => {
+            Ok(Cmd::Set(k, v)) => {
                 let insert = store.insert(k, v).is_none();
                 if insert {
                     println!("inserted key");
@@ -85,7 +98,7 @@ fn main() -> io::Result<()> {
                 }
                 fs::write(&file, &ron::to_string(&store).unwrap())?;
             },
-            None => {},
+            Err(err) => println!("{err}"),
         };
     };
 
