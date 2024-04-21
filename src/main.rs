@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::{self, Write}};
+use std::{collections::HashMap, fs, io::{self, Write}, os::unix::fs::MetadataExt};
 
 #[derive(Debug)]
 enum Cmd {
@@ -23,8 +23,29 @@ impl Cmd {
 }
 
 fn main() -> io::Result<()> {
+    // this is bad only for windows
+    // but who cares...
+    #[allow(deprecated)]
+    let mut folder = std::env::home_dir().unwrap();
+    folder.push(".raiden");
+    let mut file = folder.clone();
+    file.push("data");
+
+    let exists = std::path::Path::new(&file).exists();
+    if !exists {
+        fs::create_dir_all(folder)?;
+        fs::File::create(&file)?;
+    }
+
+    let size = fs::metadata(&file)?.size();
+    let mut store = if size == 0 {
+        HashMap::new()
+    } else {
+        let contents = fs::read_to_string(&file)?;
+        ron::from_str(&contents).unwrap()
+    };
+
     let stdin = io::stdin();
-    let mut store = HashMap::new();
     let mut input = String::new();
     loop {
         input.clear();
@@ -43,6 +64,7 @@ fn main() -> io::Result<()> {
                 } else {
                     println!("updated key");
                 }
+                fs::write(&file, &ron::to_string(&store).unwrap())?;
             },
             None => {},
         };
