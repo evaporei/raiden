@@ -54,6 +54,8 @@ fn main() -> io::Result<()> {
         let cmd = Cmd::parse(&input);
         match cmd {
             Some(Cmd::Get(k)) => {
+                let contents = fs::read_to_string(&file)?;
+                store = ron::from_str(&contents).unwrap();
                 let v = store.get(&k);
                 println!("value: {v:?}");
             },
