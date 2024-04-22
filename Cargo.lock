@@ -154,7 +154,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "raiden"
+name = "raiden-server"
 version = "0.1.0"
 dependencies = [
  "ron",
