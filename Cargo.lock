@@ -154,11 +154,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "raiden-client"
+version = "0.1.0"
+dependencies = [
+ "rustyline",
+]
+
+[[package]]
 name = "raiden-server"
 version = "0.1.0"
 dependencies = [
  "ron",
- "rustyline",
  "serde",
 ]
 

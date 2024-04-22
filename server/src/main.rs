@@ -34,7 +34,67 @@ impl Cmd {
     }
 }
 
-use rustyline::error::ReadlineError;
+use std::io::{BufRead, BufReader, Write};
+use std::net::{Shutdown, TcpListener, TcpStream};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::thread;
+
+type Store = HashMap<String, String>;
+type SyncStore = Arc<Mutex<Store>>;
+
+fn handle_client(store: SyncStore, file: &PathBuf, mut stream: TcpStream) {
+    let mut data = Vec::with_capacity(256);
+    let mut reader = BufReader::new(stream.try_clone().unwrap());
+    while match reader.read_until(b'\n', &mut data) {
+        Ok(_size) => {
+            let input = std::str::from_utf8(&data).unwrap();
+            let input = input.trim();
+            let cmd = Cmd::parse(&input);
+            println!("input: {input}");
+            println!("parsed: {cmd:?}");
+            let out = match cmd {
+                Ok(Cmd::Get(k)) => {
+                    let mut store = store.lock().unwrap();
+                    let contents = fs::read_to_string(&file).unwrap();
+                    let map2: Store = ron::from_str(&contents).unwrap();
+                    *store = map2;
+                    let v = format!("{:?}", store.get(&k));
+                    drop(store);
+                    v
+                }
+                Ok(Cmd::Set(k, v)) => {
+                    let mut store = store.lock().unwrap();
+                    let insert = store.insert(k, v).is_none();
+
+                    fs::write(&file, &ron::to_string(&*store).unwrap()).unwrap();
+                    drop(store);
+                    if insert {
+                        format!("inserted key")
+                    } else {
+                        format!("updated key")
+                    }
+                }
+                Err(err) => {
+                    format!("{err}")
+                }
+            };
+            stream.write_all(&out.as_bytes()).unwrap();
+            stream.write_all(b"\n").unwrap();
+            println!("output: {out}");
+            data.clear();
+            true
+        }
+        Err(_) => {
+            println!(
+                "an error occurred, terminating connection with {}",
+                stream.peer_addr().unwrap()
+            );
+            stream.shutdown(Shutdown::Both).unwrap();
+            false
+        }
+    } {}
+}
 
 fn main() -> io::Result<()> {
     // this is bad only for windows
@@ -55,50 +115,33 @@ fn main() -> io::Result<()> {
     }
 
     let size = fs::metadata(&file)?.size();
-    let mut store = if size == 0 {
+    let map = if size == 0 {
         fs::write(&file, "{}")?;
         HashMap::new()
     } else {
         let contents = fs::read_to_string(&file)?;
         ron::from_str(&contents).unwrap()
     };
+    let store = Arc::new(Mutex::new(map));
+    let file = Arc::new(file);
 
-    let mut rl = rustyline::DefaultEditor::new().unwrap();
-    let _ = rl.load_history(&history);
-
-    loop {
-        let input = match rl.readline("> ") {
-            Ok(line) => {
-                rl.add_history_entry(line.as_str()).unwrap();
-                line
+    let listener = TcpListener::bind("0.0.0.0:6969").unwrap();
+    println!("server listening on port 6969");
+    for stream in listener.incoming() {
+        match stream {
+            Ok(stream) => {
+                println!("new connection: {}", stream.peer_addr().unwrap());
+                let s = store.clone();
+                let f = file.clone();
+                thread::spawn(move || {
+                    handle_client(s, &f, stream);
+                });
             }
-            Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => break,
-            Err(err) => {
-                println!("error: {:?}", err);
-                break;
+            Err(e) => {
+                println!("conn error: {}", e);
             }
-        };
-        let cmd = Cmd::parse(&input);
-        match cmd {
-            Ok(Cmd::Get(k)) => {
-                let contents = fs::read_to_string(&file)?;
-                store = ron::from_str(&contents).unwrap();
-                let v = store.get(&k);
-                println!("{v:?}");
-            }
-            Ok(Cmd::Set(k, v)) => {
-                let insert = store.insert(k, v).is_none();
-                if insert {
-                    println!("inserted key");
-                } else {
-                    println!("updated key");
-                }
-                fs::write(&file, &ron::to_string(&store).unwrap())?;
-            }
-            Err(err) => println!("{err}"),
-        };
+        }
     }
 
-    let _ = rl.save_history(&history);
     Ok(())
 }
