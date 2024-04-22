@@ -11,26 +11,25 @@ impl Cmd {
         let mut words = input.split_whitespace();
         match words.next() {
             Some("get") => {
-                let k = words.next()
-                    .ok_or("get requires string")?
-                    .to_owned();
+                let k = words.next().ok_or("get requires string")?.to_owned();
                 Ok(Self::Get(k))
-            },
+            }
             Some("set") => {
-                let mut kv = words.next()
+                let mut kv = words
+                    .next()
                     .map(|kv| kv.split('='))
                     .ok_or("set argument needs to be in format key=value")?;
-                let k = kv.next()
+                let k = kv
+                    .next()
                     .ok_or("missing key in set command, example: set key=value")?
                     .to_owned();
-                let v = kv.next()
+                let v = kv
+                    .next()
                     .ok_or("missing value in set command, example: set key=value")?
                     .to_owned();
                 Ok(Self::Set(k, v))
-            },
-            Some(_) | None => {
-                Err("unknown command".to_owned())
             }
+            Some(_) | None => Err("unknown command".to_owned()),
         }
     }
 }
@@ -72,13 +71,11 @@ fn main() -> io::Result<()> {
             Ok(line) => {
                 rl.add_history_entry(line.as_str()).unwrap();
                 line
-            },
-            Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
-                break
-            },
+            }
+            Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => break,
             Err(err) => {
                 println!("error: {:?}", err);
-                break
+                break;
             }
         };
         let cmd = Cmd::parse(&input);
@@ -88,7 +85,7 @@ fn main() -> io::Result<()> {
                 store = ron::from_str(&contents).unwrap();
                 let v = store.get(&k);
                 println!("{v:?}");
-            },
+            }
             Ok(Cmd::Set(k, v)) => {
                 let insert = store.insert(k, v).is_none();
                 if insert {
@@ -97,10 +94,10 @@ fn main() -> io::Result<()> {
                     println!("updated key");
                 }
                 fs::write(&file, &ron::to_string(&store).unwrap())?;
-            },
+            }
             Err(err) => println!("{err}"),
         };
-    };
+    }
 
     let _ = rl.save_history(&history);
     Ok(())
